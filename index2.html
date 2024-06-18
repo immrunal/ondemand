@@ -1,0 +1,208 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Execute ETL Job</title>
+<style>
+       body {
+           font-family: Arial, sans-serif;
+           background-color: #f0f2f5;
+           display: flex;
+           justify-content: top;
+           align-items: center;
+           height: 100vh;
+           margin: 0;
+		   padding-top: 2cm;
+           flex-direction: column;
+       }
+       h1 {
+           color: #333;
+       }
+       .container {
+           text-align: center;
+           background: #fff;
+           padding: 20px 30px;
+           box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+           border-radius: 10px;
+       }
+       select {
+           padding: 10px;
+           font-size: 16px;
+           margin: 10px 0;
+       }
+       button {
+           background-color: #007bff;
+           color: white;
+           border: none;
+           padding: 10px 20px;
+           font-size: 16px;
+           border-radius: 5px;
+           cursor: pointer;
+       }
+       button:hover {
+           background-color: #0056b3;
+       }
+	   table {
+         width: 90%;
+         border-collapse: collapse;
+         border-spacing: 10px;
+       }
+       th, td {
+         border: 1px solid black;
+         padding: 5px;
+         text-align: left;
+       }
+       th {
+		 text-align: left;
+		 background-color: #0056b3;
+		 color: white;
+       }
+</style>
+</head>
+<body>
+<div class="container">
+<h1>Select ETL Job</h1>
+<select id="etlJobs">
+<option value="" selected disabled>Select</option>
+<option value="SOD World Head Quarters Full Load">SOD World Head Quarters Full Load</option>
+<option value="SOD World Head Quarters Incremental Load">SOD World Head Quarters Incremental Load</option>
+<option value="SOD Uruguay Incremental Load">SOD Uruguay Incremental Load</option>
+<option value="SOD Falcon Incremental Load">SOD Falcon Incremental Load</option>
+<option value="Test SOD North America Incremental Load">Test SOD North America Incremental Load</option>
+<option value="SOD Chile Incremental Load">SOD Chile Incremental Load</option>
+<option value="SOD Mexico Incremental Load">SOD Mexico Incremental Load</option>
+<option value="SOD LAA HQ Incremental Load">SOD LAA HQ Incremental Load</option>
+</select>
+<br>
+<button onclick="executeETLJob();executeJob()">Execute ETL Job</button>
+</div>
+<script src="script.js"></script>
+
+<h3>Job History</h3>
+<div id="jobHistory"></div>
+<script>
+
+		let db;
+		// Initialize IndexedDB
+		const dbRequest = indexedDB.open('JobHistoryDB', 1);
+		dbRequest.onupgradeneeded = function(event) {
+		db = event.target.result;
+		const objectStore = db.createObjectStore('jobHistory', { keyPath: 'startTime' });
+		objectStore.createIndex('jobName', 'jobName', { unique: false });
+		};
+		dbRequest.onsuccess = function(event) {
+		db = event.target.result;
+		console.log('Database initialized');
+		};
+		dbRequest.onerror = function(event) {
+		console.error('Database error:', event.target.error);
+		};
+       // Function to execute ETL
+       function executeJob() {
+           const selectedJob = document.getElementById('etlJobs').value;
+           if (!selectedJob) {
+               alert('Please select a job first.');
+               return;
+           }
+           const startTime = new Date();
+           const endTime = new Date(startTime.getTime() + 6 * 60000); // Add 6 minutes
+           const jobDetails = {
+               jobName: selectedJob,
+               startTime: startTime.toISOString(),
+               endTime: null,
+               loadType: 'INC',
+               execStatus: 'In Progress'
+           };
+           saveJobHistory(jobDetails);
+           //displayJobHistory(selectedJob);
+       }
+       // Function to save job history to IndexedDB
+function saveJobHistory(jobDetails) {
+   const transaction = db.transaction(['jobHistory'], 'readwrite');
+   const objectStore = transaction.objectStore('jobHistory');
+   objectStore.add(jobDetails);
+   transaction.oncomplete = function() {
+       console.log('Job details saved to IndexedDB.');
+   };
+   transaction.onerror = function(event) {
+       console.error('Transaction error:', event.target.error);
+   };
+}
+// Function to display job history
+function displayJobHistory(selectedJob) {
+   const transaction = db.transaction(['jobHistory'], 'readonly');
+   const objectStore = transaction.objectStore('jobHistory');
+   const index = objectStore.index('jobName');
+   const request = index.getAll(selectedJob);
+   request.onsuccess = function(event) {
+       const filteredHistory = event.target.result;
+ 
+		   //sort history by start time in descending order
+		   filteredHistory.sort((a,b) => new Date(b.startTime) - new Date(a.startTime));
+		   
+           let historyTable = '<table><tr><th>Job Name</th><th>Start Time</th><th>End Time</th><th>Load Type</th><th>Exec Status</th></tr>';
+           filteredHistory.forEach(job => {
+		   let execStatus = job.execStatus;
+		   let endTime = job.endTime;
+		   if (execStatus === 'In Progress' && new Date(job.startTime).getTime() + 6*60000 <= new Date().getTime()){
+		   execStatus = 'Success';
+		   endTime = new Date(new Date(job.startTime).getTime() + 6*60000).toISOString();
+		   job.execStatus = execStatus;
+		   job.endTime = endTime;
+		   updateJobHistory(job);
+		   }
+		   
+               historyTable += `<tr>
+<td>${job.jobName}</td>
+<td>${new Date(job.startTime).toLocaleString()}</td>
+<td>${endTime ? new Date(endTime).toLocaleString(): ''}</td>
+<td>${job.loadType}</td>
+<td>${job.execStatus}</td>
+</tr>`;
+           });
+           historyTable += '</table>';
+           document.getElementById('jobHistory').innerHTML = historyTable;
+       };
+   request.onerror = function(event) {
+       console.error('Request error:', event.target.error);
+   };
+}
+// Function to update job history in IndexedDB
+function updateJobHistory(updatedJob) {
+   const transaction = db.transaction(['jobHistory'], 'readwrite');
+   const objectStore = transaction.objectStore('jobHistory');
+   objectStore.put(updatedJob);
+   transaction.oncomplete = function() {
+       console.log('Job details updated in IndexedDB.');
+   };
+   transaction.onerror = function(event) {
+       console.error('Transaction error:', event.target.error);
+   };
+}
+	 
+       // Event listener to update job history display when a new job is selected
+       document.getElementById('etlJobs').addEventListener('change', function() {
+           const selectedJob = this.value;
+           displayJobHistory(selectedJob);
+       });
+
+	   
+	   // Initial display of job history if a job is already selected
+window.onload = function() {
+   const selectedJob = document.getElementById('etlJobs').value;
+   if (selectedJob) {
+       displayJobHistory(selectedJob);
+   }
+};
+// Periodic check to update execution status
+setInterval(() => {
+   const selectedJob = document.getElementById('etlJobs').value;
+   if (selectedJob) {
+       displayJobHistory(selectedJob);
+   }
+}, 10000);
+</script>
+</body>
+</html>
