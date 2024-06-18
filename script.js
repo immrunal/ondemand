@@ -9,6 +9,10 @@ async function executeETLJob() {
    const subscriptionId = process.env.SUBSCRIPTION_ID;
    const resourceGroupName = "JDE_NAA_UAT";
    const factoryName = "jdenaauatadf";
+   console.log('Tenant ID: ${tenantId}');
+   console.log('Client ID: ${clientId}');
+   console.log('Client Secret: ${clientSecret}');
+   console.log('Sbscription ID: ${subscriptionId}');
    const tokenResponse = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/token`, {
        method: "POST",
        headers: {
